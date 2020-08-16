@@ -9,6 +9,7 @@
   "author": "fenghen",
   "license": "MIT",
   "scripts": {
+    "start": "npm run p2p:server",
     "p2p:server": "peerjs --port 9000 --key peerjs --path /myapp --allow_discovery",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
