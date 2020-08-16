@@ -14,7 +14,8 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test": "jest --silent",
-    "dev": "parcel src/index.html"
+    "dev": "parcel src/index.html",
+    "build": "parcel build src/*.html --public-url /p2p-net"
   },
   "dependencies": {
     "peer": "^0.5.3",

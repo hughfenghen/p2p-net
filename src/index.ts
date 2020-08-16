@@ -4,22 +4,30 @@ import { RemoteNode, MsgType } from './remote-node';
 const userId = Math.random().toString(36).slice(2)
 document.body.append(`userId: ${userId}`)
 async function discoverUser() {
-  const userIds = await (await fetch('//192.168.1.2:9000/myapp/peerjs/peers')).json()
+  // const userIds = await (await fetch('//192.168.1.2:9000/myapp/peerjs/peers')).json()
+  const userIds = await (await fetch('https://fenghen-p2p-server.herokuapp.com/myapp/peerjs/peers')).json()
   return userIds.filter((id) => id !== userId)
 }
 
 async function main() {
   const peer = new Peer(userId, {
-    host: '192.168.1.2',
-    port: 9000,
+    // host: '192.168.1.2',
+    // port: 9000,
+    host: 'fenghen-p2p-server.herokuapp.com',
+    secure: true,
     path: '/myapp',
     config: {
       iceServers: [
         { urls: 'stun:ks-sh-live-p2p-01.chat.bilibili.com:3478' },
         { urls: 'stun:stun.l.google.com:19302' },
-        // { urls: 'turn:homeo@turn.bistri.com:80', credential: 'homeo' },
-      ]
-    } /* Sample servers, please use appropriate ones */
+        { urls: "turn:0.peerjs.com:3478", username: "peerjs", credential: "peerjsp" },
+      ],
+      // @ts-ignore
+      // sdpSemantics: 'unified-plan',
+      iceCandidatePoolSize: 10,
+      iceTransportPolicy: "all",
+      rtcpMuxPolicy: "require"
+    }
   })
 
 
