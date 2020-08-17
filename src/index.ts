@@ -18,14 +18,13 @@ async function main() {
     path: '/myapp',
     config: {
       iceServers: [
-        { urls: 'stun:ks-sh-live-p2p-01.chat.bilibili.com:3478' },
-        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:ks-sh-live-p2p-01.chat.bilibili.com:3478' }
       ],
       // @ts-ignore
       // sdpSemantics: 'unified-plan',
-      iceCandidatePoolSize: 10,
-      iceTransportPolicy: "all",
-      rtcpMuxPolicy: "require"
+      // iceCandidatePoolSize: 10,
+      // iceTransportPolicy: "all",
+      // rtcpMuxPolicy: "require"
     }
   })
 
