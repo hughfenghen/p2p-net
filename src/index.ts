@@ -20,7 +20,6 @@ async function main() {
       iceServers: [
         { urls: 'stun:ks-sh-live-p2p-01.chat.bilibili.com:3478' },
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: "turn:0.peerjs.com:3478", username: "peerjs", credential: "peerjsp" },
       ],
       // @ts-ignore
       // sdpSemantics: 'unified-plan',
