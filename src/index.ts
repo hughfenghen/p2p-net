@@ -7,7 +7,6 @@ async function discoverUser() {
   // const userIds = await (await fetch('//192.168.1.2:9000/myapp/peerjs/peers')).json()
   const userIds = await (await fetch('https://fenghen-p2p-server.herokuapp.com/myapp/peerjs/peers')).json()
   return userIds
-    // .filter((id) => id !== userId)
 }
 
 async function main() {
@@ -43,7 +42,7 @@ async function main() {
     })
 
     conn.on('data', (data) => {
-      console.log('server Received:', data);
+      console.log('-------- server Received:', data);
 
       if (data.type === MsgType.Ping) {
         conn.send({
@@ -55,32 +54,32 @@ async function main() {
   });
 
   let rns: RemoteNode[] = []
-  const discoverIds = await discoverUser()
-  if (!discoverIds.length || discoverIds[0] === userId) return
+  
+  // const discoverIds = await discoverUser()
+  // if (!discoverIds.length || discoverIds[0] === userId) return
+  // rns.push(new RemoteNode(peer, discoverIds[0]))
 
-  const rn = new RemoteNode(peer, discoverIds[0])
+  setInterval(async () => {
+    const rnIds = rns.map(rn => rn.remoteId)
+    const discoverIds = (await discoverUser()).filter(id => !rnIds.includes(id) && id !== userId)
+    if (!discoverIds.length) return
 
-  // setInterval(async () => {
-  //   const rnIds = rns.map(rn => rn.remoteId)
-  //   const discoverIds = (await discoverUser()).filter(id => !rnIds.includes(id))
-  //   if (!discoverIds.length) return
-
-  //   console.log('------ discoverIds: ', discoverIds)
+    console.log('========== discoverIds: ', discoverIds)
     
-  //   const newRns = discoverIds.filter(id => !rnIds.includes(id))
-  //     .map(id => new RemoteNode(peer, id))
-  //   newRns.forEach(nrn => {
-  //     const removeRn = () => {
-  //       rns = rns.filter(rn => rn.remoteId !== nrn.remoteId)
-  //       console.log('close conn; remain: ', rns)
-  //     }
-  //     nrn.conn.on('close', removeRn)
-  //     nrn.conn.on('error', removeRn)
+    const newRns = discoverIds.filter(id => !rnIds.includes(id))
+      .map(id => new RemoteNode(peer, id))
+    newRns.forEach(nrn => {
+      const removeRn = () => {
+        rns = rns.filter(rn => rn.remoteId !== nrn.remoteId)
+        console.log('close conn; remain: ', rns)
+      }
+      nrn.conn.on('close', removeRn)
+      nrn.conn.on('error', removeRn)
 
-  //   })
+    })
 
-  //   rns.push(...newRns)
-  // }, 3000)
+    rns.push(...newRns)
+  }, 3000)
 
   const div = document.createElement('div')
   document.body.append(div)

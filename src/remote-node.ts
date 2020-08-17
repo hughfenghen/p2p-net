@@ -27,8 +27,6 @@ export class RemoteNode {
     private selfPeer: Peer,
     public remoteId: string,
   ) {
-    console.log('==== new remote id: ', remoteId)
-
     this.connect()
   }
 
@@ -36,13 +34,13 @@ export class RemoteNode {
     this.tryConnect += 1
 
     this.conn = this.selfPeer.connect(this.remoteId);
-    console.log('remote connect: ', this.conn)
+    console.log('+++++++++ connect remote: ', this.remoteId, this.conn)
     this.conn.on('open', () => {
-      console.log('connection opened')
+      console.log('++++++++ remote connection opened')
       this.tryConnect = -1
       // Receive messages
       this.conn.on('data', (data) => {
-        console.log('client Received:', data);
+        console.log('++++++++ client Received:', data);
         if (data.type === MsgType.Pong) {
           this.onPong(data)
         }
@@ -66,7 +64,7 @@ export class RemoteNode {
     }
     // this.pingMsgs.add(msg)
     this.conn.send(msg)
-    console.log('----- send:', msg)
+    console.log('+++++++ send:', msg)
   }
 
   private onPong(msg) {
