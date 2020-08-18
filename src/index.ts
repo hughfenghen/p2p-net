@@ -20,11 +20,6 @@ async function main() {
       iceServers: [
         { urls: 'stun:ks-sh-live-p2p-01.chat.bilibili.com:3478' }
       ],
-      // @ts-ignore
-      // sdpSemantics: 'unified-plan',
-      // iceCandidatePoolSize: 10,
-      // iceTransportPolicy: "all",
-      // rtcpMuxPolicy: "require"
     }
   })
 
@@ -44,10 +39,9 @@ async function main() {
     conn.on('data', (data) => {
       console.log('-------- server Received:', data);
 
-      if (data.type === MsgType.Ping) {
+      if (data.params.type === MsgType.Ping) {
         conn.send({
-          ...data,
-          type: MsgType.Pong,
+          reqId: data.reqId
         })
       }
     });
