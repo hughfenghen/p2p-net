@@ -82,6 +82,10 @@ export function createManager(userId) {
           conn.send({ reqId, value, done })
         })
       }
+
+      if (params.type === MsgType.CancelQuery) {
+        // todo
+      }
     });
   });
 
@@ -91,9 +95,13 @@ export function createManager(userId) {
     remoteNodes,
     queryRemote() {
       let startRecv = false
-      remoteNodes.forEach(node => {
+      const curNodes = [...remoteNodes]
+      
+      curNodes.forEach(node => {
         node.queryRemote({ name: 'test' }, ({ value, done }) => {
+          if (startRecv) return
           startRecv = true
+          // todo: cancel other
         })
       })
     }

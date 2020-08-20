@@ -11,13 +11,24 @@ function extConnect(conn: Peer.DataConnection): DataConnection {
   let reqIdflag = 0
   const respHandlers = {}
   conn['extSend'] = (params, onResp) => {
-    reqIdflag += 1
-    respHandlers[reqIdflag] = onResp
+    const curReqId = reqIdflag + 1
+    reqIdflag = curReqId
+    
+    respHandlers[curReqId] = onResp
 
     conn.send({
-      reqId: reqIdflag,
+      reqId: curReqId,
       params,
     })
+
+    return () => {
+      conn.send({
+        params: {
+          type: MsgType.CancelQuery,
+          reqId: curReqId,
+        }
+      })
+    }
   }
   conn.on('data', ({ reqId, value, done = true }) => {
     respHandlers[reqId]?.({ value, done })
