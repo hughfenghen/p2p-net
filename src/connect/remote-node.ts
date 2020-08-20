@@ -1,12 +1,9 @@
 import Peer from "peerjs";
+import { MsgType } from "../interface";
 
-export enum MsgType {
-  Ping,
-  Pong,
-}
 
 interface DataConnection extends Peer.DataConnection {
-  extSend(params: any, onResp: ({ data: any, done: boolean }) => void): void
+  extSend(params: any, onResp: ({ value: any, done: boolean }) => void): void
 }
 
 // 扩展conn，允许通过回调获取响应
@@ -22,8 +19,8 @@ function extConnect(conn: Peer.DataConnection): DataConnection {
       params,
     })
   }
-  conn.on('data', ({ reqId, data, done = true }) => {
-    respHandlers[reqId]?.({ data, done })
+  conn.on('data', ({ reqId, value, done = true }) => {
+    respHandlers[reqId]?.({ value, done })
     if (done) {
       delete respHandlers[reqId]
     }
@@ -65,13 +62,8 @@ export class RemoteNode {
     this.conn.on('open', () => {
       console.log('++++++++ remote connection opened')
       this.tryConnect = -1
-      // Receive messages
-      this.conn.on('data', (data) => {
-        console.log('++++++++ client Received:', data);
-        if (data.type === MsgType.Pong) {
-          this.onPong(data)
-        }
-      });
+      
+      // 检测连接状态
       setInterval(() => {
         this.ping()
       }, 2000)
@@ -89,8 +81,7 @@ export class RemoteNode {
       type: MsgType.Ping,
       ts: Date.now(),
     }
-    // this.pingMsgs.add(msg)
-    // this.conn.send(msg)
+    // todo: timeout, destory
     const t = Date.now()
     this.conn.extSend({ type: MsgType.Ping }, () => {
       this.delayTime = Date.now() - t
@@ -99,10 +90,8 @@ export class RemoteNode {
     console.log('+++++++ send:', msg)
   }
 
-  private onPong(msg) {
-    // setTimeout(() => {
-    //   this.ping()
-    // }, 1000)
+  queryRemote(params, onResp) {
+    this.conn.extSend({ type: MsgType.Query, params }, onResp)
   }
 
   destory() {
