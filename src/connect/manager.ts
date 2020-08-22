@@ -39,7 +39,13 @@ async function startScan() {
 
     console.log('========== discoverIds: ', discoverIds)
 
-    remoteNodes.push(...discoverIds.map(id => new RemoteNode(peer, id)))
+    remoteNodes.push(...discoverIds.map(id => {
+      const rn = new RemoteNode(peer, id)
+      rn.on('destroy', () => {
+        remoteNodes.splice(remoteNodes.indexOf(rn), 1)
+      })
+      return rn
+    }))
 
     // newRns.forEach(nrn => {
     //   const removeRn = () => {

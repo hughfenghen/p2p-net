@@ -1,6 +1,6 @@
 import Peer from "peerjs";
+import { TinyEmitter } from 'tiny-emitter'
 import { MsgType } from "../interface";
-
 
 interface DataConnection extends Peer.DataConnection {
   extSend(params: any, onResp: ({ value: any, done: boolean }) => void): void
@@ -58,6 +58,14 @@ export class RemoteNode {
 
   private pingTimer: number
 
+  private lossPacketCount = 0
+
+  private emitter = new TinyEmitter()
+
+  public on = this.emitter.on
+  
+  public emit = this.emitter.emit
+
   constructor(
     private selfPeer: Peer,
     public remoteId: string,
@@ -75,30 +83,37 @@ export class RemoteNode {
       this.tryConnect = -1
 
       // 检测连接状态
-      setInterval(() => {
-        this.ping()
-      }, 2000)
+      this.ping()
     });
+    this.conn.on('error', () => { this.destroy() })
 
     if (this.tryConnect === -1 || this.tryConnect > 3) return
-
-    // setTimeout(() => {
-    //   this.connect()
-    // }, 3000)
   }
 
   private ping() {
-    const msg = {
-      type: MsgType.Ping,
-      ts: Date.now(),
-    }
-    // todo: timeout, destory
     const t = Date.now()
+    const timeoutTimer = setTimeout(() => {
+      this.lossPacketCount += 1
+      console.error('超时次数：', this.lossPacketCount)
+
+      // 超时3次 断开连接
+      if (this.lossPacketCount >= 3) {
+        this.destroy()
+        return
+      } 
+
+      this.ping()
+    }, 10000)
+
     this.conn.extSend({ type: MsgType.Ping }, () => {
       this.delayTime = Date.now() - t
-      console.log(2222, this.delayTime)
+      clearTimeout(timeoutTimer)
+      this.lossPacketCount = 0
+
+      setTimeout(() => {
+        this.ping()
+      }, 1000)
     })
-    console.log('+++++++ send:', msg)
   }
   
   fetchData(params) {
@@ -129,8 +144,12 @@ export class RemoteNode {
     });
   }
 
-  destory() {
+  destroy() {
+    console.warn('销毁远程连接...')
+    clearInterval(this.pingTimer)
+    this.conn.close()
 
+    this.emit('destroy')
   }
 
 }
