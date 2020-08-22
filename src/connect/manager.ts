@@ -5,7 +5,7 @@ import { MsgType } from "../interface"
 
 let peer
 // 无法连接，放弃的的名单
-const abandonedList = []
+const abandonedList: string[] = []
 
 const remoteNodes: RemoteNode[] = []
 
@@ -60,7 +60,7 @@ async function startScan() {
 
 }
 
-export function createManager(userId) {
+export function createManager(userId: string) {
   abandonedList.push(userId)
   peer = new Peer(userId, config)
 
@@ -113,6 +113,9 @@ export function createManager(userId) {
       return curNodes[0].fetchStream({ name: 'test' })
 
     //   curNodes.forEach(node => { })
+    },
+    broadcast() {
+
     }
   }
 }
