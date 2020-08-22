@@ -50,7 +50,7 @@ async function startScan() {
     //   nrn.conn.on('error', removeRn)
 
     // })
-  }, 30000)
+  }, 3000)
 
 }
 
@@ -77,10 +77,9 @@ export function createManager(userId) {
         conn.send({ reqId })
       }
 
-      if (params.type === MsgType.Query) {
-        responseTask(({ value, done }) => {
-          conn.send({ reqId, value, done })
-        })
+      if (params.type === MsgType.FetchData) {
+        // 返回10M数据
+        conn.send({ reqId, value: new Uint8Array(params.size), done: true })
       }
 
       if (params.type === MsgType.CancelQuery) {
@@ -93,17 +92,21 @@ export function createManager(userId) {
 
   return {
     remoteNodes,
-    queryRemote() {
-      let startRecv = false
+    fetchData(params): Promise<any> {
+      if (!remoteNodes.length) return
+
       const curNodes = [...remoteNodes]
-      
-      curNodes.forEach(node => {
-        node.queryRemote({ name: 'test' }, ({ value, done }) => {
-          if (startRecv) return
-          startRecv = true
-          // todo: cancel other
-        })
-      })
+
+      return curNodes[0].fetchData({ name: 'test', ...params })      
+    },
+    queryRemote() {
+      if (!remoteNodes.length) return
+
+      const curNodes = [...remoteNodes]
+
+      return curNodes[0].fetchStream({ name: 'test' })
+
+    //   curNodes.forEach(node => { })
     }
   }
 }

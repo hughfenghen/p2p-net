@@ -3,4 +3,5 @@ export enum MsgType {
   Pong = 'pong',
   Query = 'query',
   CancelQuery = 'cancelQuery',
+  FetchData = 'fetchData',
 }

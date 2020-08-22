@@ -13,7 +13,7 @@ function extConnect(conn: Peer.DataConnection): DataConnection {
   conn['extSend'] = (params, onResp) => {
     const curReqId = reqIdflag + 1
     reqIdflag = curReqId
-    
+
     respHandlers[curReqId] = onResp
 
     conn.send({
@@ -36,7 +36,7 @@ function extConnect(conn: Peer.DataConnection): DataConnection {
       delete respHandlers[reqId]
     }
   })
-  
+
   return conn as DataConnection
 }
 
@@ -73,7 +73,7 @@ export class RemoteNode {
     this.conn.on('open', () => {
       console.log('++++++++ remote connection opened')
       this.tryConnect = -1
-      
+
       // 检测连接状态
       setInterval(() => {
         this.ping()
@@ -81,7 +81,7 @@ export class RemoteNode {
     });
 
     if (this.tryConnect === -1 || this.tryConnect > 3) return
-    
+
     // setTimeout(() => {
     //   this.connect()
     // }, 3000)
@@ -100,13 +100,37 @@ export class RemoteNode {
     })
     console.log('+++++++ send:', msg)
   }
+  
+  fetchData(params) {
+    return new Promise((resolve) => {
+      this.conn.extSend({
+        type: MsgType.FetchData,
+        ...params,
+      }, ({ value }) => {
+        resolve(value)
+      })
+    })
+  }
 
-  queryRemote(params, onResp) {
-    this.conn.extSend({ type: MsgType.Query, params }, onResp)
+  fetchStream(params) {
+    return new ReadableStream({
+      start(controller) {
+        this.conn.extSend(
+          { type: MsgType.Query, params },
+          ({ value, done }) => {
+            if (done) controller.close()
+            controller.enqueue(value)
+          }
+        )
+      },
+      cancel() {
+        // todo: cancel conn
+      }
+    });
   }
 
   destory() {
-  
+
   }
 
 }
