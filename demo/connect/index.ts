@@ -1,10 +1,6 @@
-import { createManager } from '../../src/connect/manager'
-import { responseTask } from '../../src/service'
+import { connManager } from '../../src/connect/manager'
 
-const userId = Math.random().toString(36).slice(2)
-const connManager = createManager(userId)
-
-document.getElementById('myId').innerText = userId
+document.getElementById('myId').innerText = connManager.peerId
 const connUser = document.getElementById('content-user')
 setInterval(() => {
   const lis = connManager.remoteNodes.map(rn => {

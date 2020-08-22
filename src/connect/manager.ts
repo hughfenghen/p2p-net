@@ -1,11 +1,12 @@
 import Peer from "peerjs"
 import { RemoteNode } from "./remote-node"
-import { responseTask } from "../service"
 import { MsgType } from "../interface"
 
-let peer
+const peerId = Math.random().toString(36).slice(2)
+
 // 无法连接，放弃的的名单
 const abandonedList: string[] = []
+abandonedList.push(peerId)
 
 const remoteNodes: RemoteNode[] = []
 
@@ -22,6 +23,7 @@ const config = {
   }
 }
 
+const peer = new Peer(peerId, config)
 
 async function discoverUser(discoverUrl?) {
   // const userIds = await (await fetch('//192.168.1.2:9000/myapp/peerjs/peers')).json()
@@ -46,76 +48,62 @@ async function startScan() {
       })
       return rn
     }))
-
-    // newRns.forEach(nrn => {
-    //   const removeRn = () => {
-    //     remoteNodes = remoteNodes.filter(rn => rn.remoteId !== nrn.remoteId)
-    //     console.log('close conn; remain: ', remoteNodes)
-    //   }
-    //   nrn.conn.on('close', removeRn)
-    //   nrn.conn.on('error', removeRn)
-
-    // })
   }, 3000)
 
 }
 
-export function createManager(userId: string) {
-  abandonedList.push(userId)
-  peer = new Peer(userId, config)
+peer.on('connection', (conn) => {
+  console.log('------ Received connection:', conn)
+  conn.on('open', () => {
+    console.log('------ Received connection opened:', conn)
+  })
+  conn.on('error', () => {
+    console.log('------ Received connection error:', conn)
+  })
+  conn.on('close', () => {
+    console.log('------ Received connection close:', conn)
+  })
 
-  peer.on('connection', (conn) => {
-    console.log('------ Received connection:', conn)
-    conn.on('open', () => {
-      console.log('------ Received connection opened:', conn)
-    })
-    conn.on('error', () => {
-      console.log('------ Received connection error:', conn)
-    })
-    conn.on('close', () => {
-      console.log('------ Received connection close:', conn)
-    })
+  conn.on('data', ({ params, reqId }) => {
+    console.log('-------- server Received:', reqId, params);
 
-    conn.on('data', ({ params, reqId }) => {
-      console.log('-------- server Received:', reqId, params);
+    if (params.type === MsgType.Ping) {
+      conn.send({ reqId })
+    }
 
-      if (params.type === MsgType.Ping) {
-        conn.send({ reqId })
-      }
+    if (params.type === MsgType.FetchData) {
+      // 返回10M数据
+      conn.send({ reqId, value: new Uint8Array(params.size), done: true })
+    }
 
-      if (params.type === MsgType.FetchData) {
-        // 返回10M数据
-        conn.send({ reqId, value: new Uint8Array(params.size), done: true })
-      }
-
-      if (params.type === MsgType.CancelQuery) {
-        // todo
-      }
-    });
+    if (params.type === MsgType.CancelQuery) {
+      // todo
+    }
   });
+});
 
-  startScan()
+startScan()
 
-  return {
-    remoteNodes,
-    fetchData(params): Promise<any> {
-      if (!remoteNodes.length) return
+export const connManager = {
+  peerId,
+  remoteNodes,
+  fetchData(params): Promise<any> {
+    if (!remoteNodes.length) return
 
-      const curNodes = [...remoteNodes]
+    const curNodes = [...remoteNodes]
 
-      return curNodes[0].fetchData({ name: 'test', ...params })      
-    },
-    queryRemote() {
-      if (!remoteNodes.length) return
+    return curNodes[0].fetchData({ name: 'test', ...params })
+  },
+  queryRemote() {
+    if (!remoteNodes.length) return
 
-      const curNodes = [...remoteNodes]
+    const curNodes = [...remoteNodes]
 
-      return curNodes[0].fetchStream({ name: 'test' })
+    return curNodes[0].fetchStream({ name: 'test' })
 
     //   curNodes.forEach(node => { })
-    },
-    broadcast() {
+  },
+  broadcast() {
 
-    }
   }
 }
