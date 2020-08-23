@@ -1,4 +1,7 @@
 import { RemoteNode } from "../connect/remote-node"
+import { connManager } from "../connect/manager"
+import { MsgType, RespHandler } from "../interface"
+import { read } from "fs"
 
 class Resource {
   // mimeType: string
@@ -9,7 +12,9 @@ class Resource {
 
   private stream: ReadableStream
 
-  constructor(public url: string) {}
+  constructor(public url: string) {
+    // todo: 保持N分钟，销毁资源，避免泄露
+  }
 
   addRemoteNode(remoteNode: RemoteNode) {
     const { remoteNodes } = this
@@ -23,20 +28,69 @@ class Resource {
   setStream(stream: ReadableStream) {
     this.stream = stream
   }
+
+  // 优先读取本地资源，如果不存在尝试远程读取
+  getResourceData(onResp): { done: boolean, value: any } {
+    if (this.readLocalData(onResp)) return
+
+    this.readRemoteData(onResp)
+  }
+
+  private readRemoteData(onResp) {
+    // todo: 可以考虑按延迟选取remoteNode
+    const rn = this.remoteNodes[0]
+    // todo: 可能出现error
+    const stream = rn.fetchStream(this.url)
+    const reader = stream.getReader()
+    reader.read().then(function process({ done, value }) {
+      onResp({ done, value })
+      if (done) return
+
+      reader.read().then(process)
+    })
+  }
+
+  // 仅读取本地资源
+  readLocalData(onResp: RespHandler): boolean {
+    if (this.data) {
+      onResp({ done: true, value: this.data })
+      return true
+    }
+    if (this.stream) {
+      const reader = this.stream.getReader()
+      reader.read().then(function process({ done, value }) {
+        onResp({ done, value })
+        if (done) return
+
+        reader.read().then(process)
+      })
+      return true
+    }
+
+    return false
+  }
 }
 
 // 管理所有资源
 const Table: { [key: string]: Resource } = {}
 
-export async function getResource(url: string): Promise<Resource> {
+export async function getResourceData(url: string): Promise<Resource> {
   if (Table[url]) return Table[url]
 
   Table[url] = new Resource(url)
-
+  connManager.broadcast(MsgType.ResourceInfoSync, url)
   const stream = await fetchResOfServer(url)
   Table[url].setStream(stream)
 
   return Table[url]
+}
+
+export function readLocalResource(url: string, onResp: RespHandler) {
+  if (Table[url]) {
+    onResp({ done: true, value: null })
+    return
+  }
+  Table[url].readLocalData(onResp)
 }
 
 export function addRemoteResource(url: string, remoteNode) {

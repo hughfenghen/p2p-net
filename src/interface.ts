@@ -1,7 +1,9 @@
 export enum MsgType {
   Ping = 'ping',
   Pong = 'pong',
-  Query = 'query',
-  CancelQuery = 'cancelQuery',
+  FetchStream = 'fetchStream',
   FetchData = 'fetchData',
+  ResourceInfoSync = 'resourceInfoSync',
 }
+
+export type RespHandler = ({ done: boolean, value: any }) => void

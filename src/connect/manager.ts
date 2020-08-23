@@ -1,6 +1,7 @@
 import Peer from "peerjs"
 import { RemoteNode } from "./remote-node"
 import { MsgType } from "../interface"
+import { addRemoteResource, readLocalResource } from "../resource"
 
 const peerId = Math.random().toString(36).slice(2)
 
@@ -76,8 +77,14 @@ peer.on('connection', (conn) => {
       conn.send({ reqId, value: new Uint8Array(params.size), done: true })
     }
 
-    if (params.type === MsgType.CancelQuery) {
-      // todo
+    if (params.type === MsgType.ResourceInfoSync) {
+      addRemoteResource(params.msg, conn)
+    }
+
+    if (params.type === MsgType.FetchStream) {
+      readLocalResource(params.url, ({ done, value }) => {
+        conn.send({ reqId, done, value })
+      })
     }
   });
 });
@@ -94,16 +101,9 @@ export const connManager = {
 
     return curNodes[0].fetchData({ name: 'test', ...params })
   },
-  queryRemote() {
-    if (!remoteNodes.length) return
-
-    const curNodes = [...remoteNodes]
-
-    return curNodes[0].fetchStream({ name: 'test' })
-
-    //   curNodes.forEach(node => { })
-  },
-  broadcast() {
-
+  broadcast(msgType: MsgType, msg) {
+    remoteNodes.forEach(node => {
+      node.sendSimpleMsg(msgType, msg)
+    })
   }
 }
