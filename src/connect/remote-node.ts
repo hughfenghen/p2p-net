@@ -1,6 +1,7 @@
 import Peer from "peerjs";
 import { TinyEmitter } from 'tiny-emitter'
 import { MsgType, RespHandler } from "../interface";
+import { addRemoteResource, readLocalResource } from "../resource";
 
 interface DataConnection extends Peer.DataConnection {
   extSend(params: any, onResp?: RespHandler): void
@@ -10,20 +11,29 @@ interface DataConnection extends Peer.DataConnection {
 function extConnect(conn: Peer.DataConnection): DataConnection {
   let reqIdflag = 0
   const respHandlers = {}
+  const timer = {}
   conn['extSend'] = (params, onResp) => {
     console.debug('[rn] extSend', params)
-    const curReqId = reqIdflag + 1
-    reqIdflag = curReqId
+    const curReqId = `${conn.peer}-${reqIdflag + 1}`
+    reqIdflag += 1
 
     respHandlers[curReqId] = onResp
+    // 设定超时，避免handler堆积
+    timer[curReqId] = window.setTimeout(() => {
+      delete respHandlers[curReqId]
+    }, 10000)
 
     conn.send({
       reqId: curReqId,
       params,
     })
   }
+  // 这里只处理本地发出去的请求，的回应
+  // 远程请求的响应在serverHandler中
   conn.on('data', ({ reqId, value, done = true }) => {
     console.debug('[rn] extRecv', { done, value })
+    clearTimeout(timer[reqId])
+
     respHandlers[reqId]?.({ value, done })
     if (done) {
       delete respHandlers[reqId]
@@ -41,66 +51,96 @@ export class RemoteNode {
 
   // status: 
 
-  private tryConnect = 0
-
   private pingTimer: number
+  private pingTimtoutTimer: number
+  private openTimtoutTimer: number
 
   private lossPacketCount = 0
 
   private emitter = new TinyEmitter()
 
-  public on = this.emitter.on
-  
-  public emit = this.emitter.emit
+  on = this.emitter.on
 
-  constructor(
-    private selfPeer: Peer,
-    public remoteId: string,
-  ) {
-    this.connect()
-  }
+  emit = this.emitter.emit
 
-  private connect() {
-    this.tryConnect += 1
+  remoteId: string
 
-    this.conn = extConnect(this.selfPeer.connect(this.remoteId))
-    console.log('+++++++++ connect remote: ', this.remoteId, this.conn)
-    this.conn.on('open', () => {
-      console.log('++++++++ remote connection opened')
-      this.tryConnect = -1
+  constructor(conn: Peer.DataConnection) {
+    this.remoteId = conn.peer
+    this.conn = extConnect(conn)
 
-      // 检测连接状态
+    if (this.conn.open) {
       this.ping()
-    });
-    this.conn.on('error', () => { this.destroy() })
+    } else {
+      this.openTimtoutTimer = window.setTimeout(() => {
+        console.error('open connection timeout')
+        this.destroy()
+      }, 10000)
+      this.conn.on('open', () => {
+        clearTimeout(this.openTimtoutTimer)
+        console.log('++++++++ remote connection opened')
+        this.ping()
+      });
+    }
 
-    if (this.tryConnect === -1 || this.tryConnect > 3) return
+    this.conn.on('data', this.serverHandler)
+
+    this.conn.on('error', (err) => {
+      console.error(err)
+      this.destroy() 
+    })
   }
 
   private ping() {
     const t = Date.now()
-    const timeoutTimer = setTimeout(() => {
+    this.pingTimtoutTimer = window.setTimeout(() => {
       this.lossPacketCount += 1
-      console.error('超时次数：', this.lossPacketCount)
+      console.error('超时次数：', this.lossPacketCount, this.remoteId)
 
       // 超时3次 断开连接
       if (this.lossPacketCount >= 3) {
         this.destroy()
         return
-      } 
+      }
 
       this.ping()
-    }, 10000)
+    }, 3000)
 
+    console.debug('++++++++ ping')
     this.conn.extSend({ type: MsgType.Ping }, () => {
       this.delayTime = Date.now() - t
-      clearTimeout(timeoutTimer)
+      clearTimeout(this.pingTimtoutTimer)
       this.lossPacketCount = 0
 
-      setTimeout(() => {
+      this.pingTimer = window.setTimeout(() => {
         this.ping()
       }, 1000)
     })
+  }
+
+  // 响应远程请求
+  private serverHandler = ({ params, reqId }) => {
+    // 如果是本地发起的请求的响应, 没有params.type
+    if (!params || !params.type) return
+
+    console.log('-------- server Received:', reqId, params);
+    const { conn } = this
+    switch (params.type) {
+      case MsgType.Ping:
+        conn.send({ reqId, done: true })
+        break
+      case MsgType.FetchData:
+        conn.send({ reqId, value: new Uint8Array(params.size), done: true })
+        break
+      case MsgType.ResourceInfoSync:
+        addRemoteResource(params.msg, this)
+        break
+      case MsgType.FetchStream:
+        readLocalResource(params.url, ({ done, value }) => {
+          conn.send({ reqId, done, value })
+        })
+        break
+    }
   }
 
   sendSimpleMsg(type: MsgType, msg) {
@@ -143,6 +183,8 @@ export class RemoteNode {
   destroy() {
     console.warn('销毁远程连接...')
     clearInterval(this.pingTimer)
+    clearInterval(this.pingTimtoutTimer)
+    clearInterval(this.openTimtoutTimer)
     this.conn.close()
 
     this.emit('destroy')

@@ -1,7 +1,6 @@
-import Peer from "peerjs"
-import { RemoteNode } from "./remote-node"
-import { MsgType } from "../interface"
-import { addRemoteResource, readLocalResource } from "../resource"
+import Peer from 'peerjs'
+import { RemoteNode } from './remote-node'
+import { MsgType } from '../interface'
 
 const peerId = Math.random().toString(36).slice(2)
 
@@ -26,6 +25,7 @@ const config = {
 
 const peer = new Peer(peerId, config)
 
+// todo: discoverUrl
 async function discoverUser(discoverUrl?) {
   // const userIds = await (await fetch('//192.168.1.2:9000/myapp/peerjs/peers')).json()
   const userIds = await (await fetch('https://fenghen-p2p-server.herokuapp.com/myapp/peerjs/peers')).json()
@@ -42,51 +42,32 @@ async function startScan() {
 
     console.log('========== discoverIds: ', discoverIds)
 
-    remoteNodes.push(...discoverIds.map(id => {
-      const rn = new RemoteNode(peer, id)
-      rn.on('destroy', () => {
-        remoteNodes.splice(remoteNodes.indexOf(rn), 1)
-      })
-      return rn
-    }))
+    discoverIds.forEach(createRemoteNode)
   }, 3000)
 
 }
 
+function createRemoteNode(flag: string | Peer.DataConnection) {
+  const id = typeof flag === 'string' ? flag : flag.peer
+  // 连接已存在
+  if (remoteNodes.some(n => n.remoteId === id)) return false
+
+  const conn = typeof flag === 'string' ? peer.connect(id) : flag
+
+  const rn = new RemoteNode(conn)
+  console.log('============ createRemoteNode', rn)
+  rn.on('destroy', () => {
+    remoteNodes.splice(remoteNodes.indexOf(rn), 1)
+  })
+
+  remoteNodes.push(rn)
+}
+
 peer.on('connection', (conn) => {
   console.log('------ Received connection:', conn)
+  createRemoteNode(conn)
   conn.on('open', () => {
-    console.log('------ Received connection opened:', conn)
   })
-  conn.on('error', () => {
-    console.log('------ Received connection error:', conn)
-  })
-  conn.on('close', () => {
-    console.log('------ Received connection close:', conn)
-  })
-
-  conn.on('data', ({ params, reqId }) => {
-    console.log('-------- server Received:', reqId, params);
-
-    if (params.type === MsgType.Ping) {
-      conn.send({ reqId })
-    }
-
-    if (params.type === MsgType.FetchData) {
-      // 返回10M数据
-      conn.send({ reqId, value: new Uint8Array(params.size), done: true })
-    }
-
-    if (params.type === MsgType.ResourceInfoSync) {
-      addRemoteResource(params.msg, conn)
-    }
-
-    if (params.type === MsgType.FetchStream) {
-      readLocalResource(params.url, ({ done, value }) => {
-        conn.send({ reqId, done, value })
-      })
-    }
-  });
 });
 
 startScan()

@@ -39,7 +39,7 @@ class Resource {
   private readRemoteData(onResp) {
     // todo: 可以考虑按延迟选取remoteNode
     const rn = this.remoteNodes[0]
-    // todo: 可能出现error
+    // todo: 可能出现error, 超时
     const stream = rn.fetchStream(this.url)
     const reader = stream.getReader()
     reader.read().then(function process({ done, value }) {
