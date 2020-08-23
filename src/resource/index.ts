@@ -30,7 +30,7 @@ class Resource {
   }
 
   // 优先读取本地资源，如果不存在尝试远程读取
-  getResourceData(onResp): { done: boolean, value: any } {
+  readResourceData(onResp: RespHandler): { done: boolean, value: any } {
     if (this.readLocalData(onResp)) return
 
     this.readRemoteData(onResp)
@@ -57,6 +57,7 @@ class Resource {
       return true
     }
     if (this.stream) {
+      // todo: 流被locked 额外处理逻辑
       const reader = this.stream.getReader()
       reader.read().then(function process({ done, value }) {
         onResp({ done, value })
@@ -74,15 +75,19 @@ class Resource {
 // 管理所有资源
 const Table: { [key: string]: Resource } = {}
 
-export async function getResourceData(url: string): Promise<Resource> {
-  if (Table[url]) return Table[url]
+export async function getResourceData(url: string, onResp: RespHandler) {
+  if (Table[url]) {
+    Table[url].readResourceData(onResp)
+    return 
+  }
 
   Table[url] = new Resource(url)
   connManager.broadcast(MsgType.ResourceInfoSync, url)
+  
   const stream = await fetchResOfServer(url)
   Table[url].setStream(stream)
 
-  return Table[url]
+  Table[url].readLocalData(onResp)
 }
 
 export function readLocalResource(url: string, onResp: RespHandler) {
@@ -99,6 +104,10 @@ export function addRemoteResource(url: string, remoteNode) {
   }
 
   Table[url].addRemoteNode(remoteNode)
+}
+
+export function getAllResource(): string[] {
+  return Object.keys(Table)
 }
 
 async function fetchResOfServer(url: string): Promise<ReadableStream> {
