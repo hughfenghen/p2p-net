@@ -123,7 +123,7 @@ export class RemoteNode {
     // 如果是本地发起的请求的响应, 没有params.type
     if (!params || !params.type) return
 
-    console.log('-------- server Received:', reqId, params);
+    console.debug('-------- server Received:', reqId, params);
     const { conn } = this
     switch (params.type) {
       case MsgType.Ping:
@@ -165,12 +165,12 @@ export class RemoteNode {
 
   fetchStream(url: string) {
     return new ReadableStream({
-      start(controller) {
+      start: (controller) => {
         this.conn.extSend(
           { type: MsgType.FetchStream, url },
           ({ value, done }) => {
-            if (done) controller.close()
             controller.enqueue(value)
+            if (done) controller.close()
           }
         )
       },
