@@ -8,12 +8,23 @@
 </head>
 
 <body>
-  <strong>已缓存资源</strong>
+  <span>我的ID：</span>
+  <strong id="myId"></strong>
+  <div>P2P节点：</div>
+  <ul id="conn-user"></ul>
+  <hr>
+  <strong>已缓存的资源</strong>
   <ul id="res-table"></ul>
   <hr>
-  <strong>获取资源</strong>
+  <strong>P2P上传：<span id="p2p-upload-size"></span> KB</strong> |
+  <strong>P2P下载：<span id="p2p-download-size"></span> KB</strong>
+  <hr>
+  <!-- <strong>获取资源</strong>
   <input id="res-input" type="text">
   <button id="get-res">get~</button>
+  <hr> -->
+  <button id="get-imgs">加载10张图片</button>
+
   <script src="./index.ts"></script>
 </body>
 

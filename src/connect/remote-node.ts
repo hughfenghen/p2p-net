@@ -65,6 +65,10 @@ export class RemoteNode {
 
   remoteId: string
 
+  downloadBytes = 0
+
+  uploadBytes = 0
+
   constructor(conn: Peer.DataConnection) {
     this.remoteId = conn.peer
     this.conn = extConnect(conn)
@@ -138,6 +142,9 @@ export class RemoteNode {
       case MsgType.FetchStream:
         readLocalResource(params.url, ({ done, value }) => {
           conn.send({ reqId, done, value })
+          if (value && value.byteLength) {
+            this.uploadBytes += value.byteLength
+          }
         })
         break
     }
@@ -171,6 +178,10 @@ export class RemoteNode {
           ({ value, done }) => {
             controller.enqueue(value)
             if (done) controller.close()
+
+            if (value && value.byteLength) {
+              this.downloadBytes += value.byteLength
+            }
           }
         )
       },

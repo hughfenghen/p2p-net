@@ -1,7 +1,7 @@
 import { connManager } from '../../src/connect/manager'
 
 document.getElementById('myId').innerText = connManager.peerId
-const connUser = document.getElementById('content-user')
+const connUser = document.getElementById('conn-user')
 setInterval(() => {
   const lis = connManager.remoteNodes.map(rn => {
     const li = document.createElement('li')

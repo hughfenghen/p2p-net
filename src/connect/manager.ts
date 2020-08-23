@@ -25,6 +25,16 @@ const config = {
 
 const peer = new Peer(peerId, config)
 
+const flowStatistics = {}
+setInterval(() => {
+  remoteNodes.forEach(node => {
+    flowStatistics[node.remoteId] = {
+      download: node.downloadBytes,
+      upload: node.uploadBytes,
+    }
+  })
+}, 1000)
+
 // todo: discoverUrl
 async function discoverUser(discoverUrl?) {
   // const userIds = await (await fetch('//192.168.1.2:9000/myapp/peerjs/peers')).json()
@@ -75,6 +85,7 @@ startScan()
 export const connManager = {
   peerId,
   remoteNodes,
+  flowStatistics,
   fetchData(params): Promise<any> {
     if (!remoteNodes.length) return
 
