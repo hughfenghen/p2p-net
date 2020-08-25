@@ -13,6 +13,8 @@ function extConnect(conn: Peer.DataConnection): DataConnection {
   const respHandlers = {}
   const timer = {}
   conn['extSend'] = (params, onResp) => {
+    if (!conn.open) return
+
     console.debug('[rn] extSend', params)
     const curReqId = `${conn.peer}-${reqIdflag + 1}`
     reqIdflag += 1

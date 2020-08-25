@@ -39,6 +39,10 @@ class Resource {
     this.stream = stream
   }
 
+  setData(data: any) {
+    this.data = data
+  }
+
   // 优先读取本地资源，如果不存在尝试远程读取
   readResourceData(onResp: RespHandler): { done: boolean, value: any } {
     if (this.readLocalData(onResp)) return
@@ -78,10 +82,11 @@ class Resource {
       let data = null
 
       const process = ({ done, value }) => {
-        onResp({ done, value })
+        // onResp({ done, value })
         data = concatArrayBuffers(data, value)
         if (done) {
           this.data = data
+          onResp({ done, value: data })
           reader.releaseLock()
           return
         }
@@ -153,10 +158,9 @@ export async function getResourceData(url: string, onResp: RespHandler) {
 
   ResourceTable.add(url, new Resource(url))
   
-  const stream = await fetchResOfServer(url)
-  ResourceTable.get(url).setStream(stream)
-
-  ResourceTable.get(url).readLocalData(onResp)
+  const buffer = await fetchResOfServer(url)
+  ResourceTable.get(url).setData(buffer)
+  onResp({ done: true, value: buffer })
 }
 
 export function readLocalResource(url: string, onResp: RespHandler) {
@@ -177,7 +181,8 @@ export function getAllResource(): string[] {
   return Object.keys(ResourceTable.getAll())
 }
 
-async function fetchResOfServer(url: string): Promise<ReadableStream> {
-  const res = await fetch(url)
-  return res.body
+async function fetchResOfServer(url: string): Promise<ArrayBuffer> {
+  const res = await fetch(url, { cache: 'no-cache' })
+  if (res.ok) return res.arrayBuffer()
+  throw new Error(`url: ${url}, res: ${res.status}`)
 }
