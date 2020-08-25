@@ -43,10 +43,9 @@ class Resource {
   readResourceData(onResp: RespHandler): { done: boolean, value: any } {
     if (this.readLocalData(onResp)) return
 
+    // 当前资源已无法获取，重来一遍从CDN上读取
     if (this.readRemoteData(onResp)) return
 
-    // 当前资源已无法获取，重来一遍从CDN上读取
-    delete Table[this.url]
     getResourceData(this.url, onResp)
   }
 
@@ -98,40 +97,84 @@ class Resource {
   }
 }
 
-// 管理所有资源
-const Table: { [key: string]: Resource } = {}
+
+// 创建资源管理器
+function createResourceTable() {
+  const Table: { [key: string]: Resource } = {}
+  const lastAccessTimes = {}
+  const expiresTime = 3 * 60 * 1000
+  
+  let checkTimer = null
+  
+  function runCheck() {
+    if (checkTimer) return
+
+    // 5s 检查一次失效资源, 避免内存泄露
+    checkTimer = setInterval(function () {
+      for (const url in lastAccessTimes) {
+        if (Date.now() - lastAccessTimes[url] > expiresTime) {
+          delete lastAccessTimes[url]
+          delete Table[url]
+        }
+      }
+      if (Object.keys(lastAccessTimes).length === 0) clearInterval(checkTimer)
+    }, 5000)
+  }
+
+  // todo: 资源删除、失效时间更新，是否要同步远端？
+  return {
+    get(url: string) {
+      // 重置失效时间
+      if (lastAccessTimes[url]) lastAccessTimes[url] = Date.now()
+
+      return Table[url]
+    },
+    add(url: string, resource: Resource) {
+      if (Table[url]) throw new Error(`Resource<${url}> already exists`)
+      
+      lastAccessTimes[url] = Date.now()
+      Table[url] = resource
+      connManager.broadcast(MsgType.ResourceInfoSync, url)
+      runCheck()
+    },
+    getAll() {
+      return { ...Table }
+    }
+  }
+}
+
+const ResourceTable = createResourceTable()
 
 export async function getResourceData(url: string, onResp: RespHandler) {
-  if (Table[url]) {
-    Table[url].readResourceData(onResp)
+  if (ResourceTable.get(url)) {
+    ResourceTable.get(url).readResourceData(onResp)
     return 
   }
 
-  Table[url] = new Resource(url)
-  connManager.broadcast(MsgType.ResourceInfoSync, url)
+  ResourceTable.add(url, new Resource(url))
   
   const stream = await fetchResOfServer(url)
-  Table[url].setStream(stream)
+  ResourceTable.get(url).setStream(stream)
 
-  Table[url].readLocalData(onResp)
+  ResourceTable.get(url).readLocalData(onResp)
 }
 
 export function readLocalResource(url: string, onResp: RespHandler) {
-  if (!Table[url].readLocalData(onResp)) {
+  if (!ResourceTable.get(url).readLocalData(onResp)) {
     onResp({ done: true, value: null })
   }
 }
 
 export function addRemoteResource(url: string, remoteNode) {
-  if (!Table[url]) {
-    Table[url] = new Resource(url)
+  if (!ResourceTable.get(url)) {
+    ResourceTable.add(url, new Resource(url))
   }
 
-  Table[url].addRemoteNode(remoteNode)
+  ResourceTable.get(url).addRemoteNode(remoteNode)
 }
 
 export function getAllResource(): string[] {
-  return Object.keys(Table)
+  return Object.keys(ResourceTable.getAll())
 }
 
 async function fetchResOfServer(url: string): Promise<ReadableStream> {
