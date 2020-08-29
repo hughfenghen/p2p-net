@@ -15,7 +15,6 @@ function extConnect(conn: Peer.DataConnection): DataConnection {
   conn['extSend'] = (params, onResp) => {
     if (!conn.open) return
 
-    console.debug('[rn] extSend', params)
     const curReqId = `${conn.peer}-${reqIdflag + 1}`
     reqIdflag += 1
 
@@ -25,6 +24,7 @@ function extConnect(conn: Peer.DataConnection): DataConnection {
       delete respHandlers[curReqId]
     }, 10000)
 
+    console.debug('[rn] extSend', { reqId: curReqId, params })
     conn.send({
       reqId: curReqId,
       params,
@@ -33,7 +33,7 @@ function extConnect(conn: Peer.DataConnection): DataConnection {
   // 这里只处理本地发出去的请求，的回应
   // 远程请求的响应在serverHandler中
   conn.on('data', ({ reqId, value, done = true }) => {
-    console.debug('[rn] extRecv', { done, value })
+    console.debug('[rn] extRecv', { reqId, done, value })
     clearTimeout(timer[reqId])
 
     respHandlers[reqId]?.({ value, done })
@@ -129,7 +129,6 @@ export class RemoteNode {
     // 如果是本地发起的请求的响应, 没有params.type
     if (!params || !params.type) return
 
-    console.debug('-------- server Received:', reqId, params);
     const { conn } = this
     switch (params.type) {
       case MsgType.Ping:

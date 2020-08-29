@@ -1,4 +1,4 @@
-import { getAllResource, getResourceData } from "../../src/resource"
+import { getAllResource, getResourceData, getServerDownloadBytes } from "../../src/resource"
 import { connManager } from "../../src/connect/manager"
 
 
@@ -18,6 +18,7 @@ setInterval(() => {
 const resTable = document.getElementById('res-table')
 const p2pUpload = document.getElementById('p2p-upload-size')
 const p2pDownload = document.getElementById('p2p-download-size')
+const cdnDownload = document.getElementById('cdn-download-size')
 setInterval(() => {
   resTable.innerHTML = ''
   const items = getAllResource().map((url) => {
@@ -39,6 +40,7 @@ setInterval(() => {
   
   p2pUpload.textContent = String(Math.round(upload / 1024))
   p2pDownload.textContent = String(Math.round(download / 1024))
+  cdnDownload.textContent = String(Math.round(getServerDownloadBytes() / 1024))
 }, 1000)
 
 // const inputEl = document.getElementById('res-input') as HTMLInputElement

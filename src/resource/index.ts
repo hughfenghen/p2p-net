@@ -12,19 +12,26 @@ function concatArrayBuffers(buf1: ArrayBuffer, buf2: ArrayBuffer) {
   return tmp.buffer
 };
 
+async function fetchResOfServer(url: string): Promise<ArrayBuffer> {
+  const res = await fetch(url, { cache: 'no-cache' })
+  // todo: 流式读取，也许可以降低延迟
+  if (res.ok) return res.arrayBuffer()
+  throw new Error(`url: ${url}, res: ${res.status}`)
+}
 
 class Resource {
   // mimeType: string
 
-  data: ArrayBuffer
+  private data: ArrayBuffer
+
+  private fetchPromise: Promise<ArrayBuffer> | null = null
 
   private remoteNodes: RemoteNode[] = []
 
-  private stream: ReadableStream
-
-  constructor(public url: string) {
-    // todo: 保持N分钟，销毁资源，避免泄露
-  }
+  constructor(
+    public url: string,
+    public source: 'local' | 'remote'
+  ) {}
 
   addRemoteNode(remoteNode: RemoteNode) {
     const { remoteNodes } = this
@@ -35,37 +42,60 @@ class Resource {
     })
   }
 
-  setStream(stream: ReadableStream) {
-    this.stream = stream
-  }
-
   setData(data: any) {
     this.data = data
+    this.source = 'local'
+  }
+
+  setFetchPromise(fetchPromise: Promise<ArrayBuffer>) {
+    this.fetchPromise = fetchPromise
+    fetchPromise.then((data) => {
+      this.setData(data)
+      this.fetchPromise = null
+    }).catch(() => {
+      this.fetchPromise = null
+    })
   }
 
   // 优先读取本地资源，如果不存在尝试远程读取
   readResourceData(onResp: RespHandler): { done: boolean, value: any } {
     if (this.readLocalData(onResp)) return
 
-    // 当前资源已无法获取，重来一遍从CDN上读取
     if (this.readRemoteData(onResp)) return
 
-    getResourceData(this.url, onResp)
+    console.error('未读取到本地资源数据')
+    onResp({ done: true, value: null })
   }
 
-  private readRemoteData(onResp) {
+  private readRemoteData(onResp: RespHandler) {
     if (!this.remoteNodes.length) return false
     // todo: 可以考虑按延迟选取remoteNode
     const rn = this.remoteNodes[0]
-    // todo: 可能出现error, 超时
+    // todo: 可能出现error, 超时(rn destroy, error事件)
     const stream = rn.fetchStream(this.url)
     const reader = stream.getReader()
-    reader.read().then(function process({ done, value }) {
-      onResp({ done, value })
-      if (done) return
+
+    let data
+    let fetchResolve
+    const fetchPromise = new Promise<ArrayBuffer>((resolve, reject) => {
+      fetchResolve = resolve
+      // todo: 超时需要reject
+    })
+    this.setFetchPromise(fetchPromise)
+    const process = ({ done, value }) => {
+      // onResp({ done, value })
+      data = concatArrayBuffers(data, value)
+      if (done) {
+        fetchResolve(data)
+        
+        onResp({ done, value: data })
+        reader.releaseLock()
+        return
+      }
 
       reader.read().then(process)
-    })
+    }
+    reader.read().then(process)
 
     return true
   }
@@ -75,26 +105,12 @@ class Resource {
     if (this.data) {
       onResp({ done: true, value: this.data })
       return true
-    }
-    if (this.stream) {
-      // todo: 流被locked 额外处理逻辑
-      const reader = this.stream.getReader()
-      let data = null
-
-      const process = ({ done, value }) => {
-        // onResp({ done, value })
-        data = concatArrayBuffers(data, value)
-        if (done) {
-          this.data = data
-          onResp({ done, value: data })
-          reader.releaseLock()
-          return
-        }
-
-        reader.read().then(process)
-      }
-
-      reader.read().then(process)
+    } else if (this.fetchPromise) {
+      this.fetchPromise.then((data) => {
+        onResp({ done: true, value: data })
+      }).catch(() => {
+        onResp({ done: true, value: null })
+      })
       return true
     }
 
@@ -111,7 +127,7 @@ function createResourceTable() {
   
   let checkTimer = null
   
-  function runCheck() {
+  function runExpiresCheck() {
     if (checkTimer) return
 
     // 5s 检查一次失效资源, 避免内存泄露
@@ -122,7 +138,12 @@ function createResourceTable() {
           delete Table[url]
         }
       }
-      if (Object.keys(lastAccessTimes).length === 0) clearInterval(checkTimer)
+
+      if (Object.keys(lastAccessTimes).length === 0) {
+        // 没有资源时终止定时器，等待添加资源时启动
+        clearInterval(checkTimer)
+        checkTimer = null
+      }
     }, 5000)
   }
 
@@ -139,8 +160,16 @@ function createResourceTable() {
       
       lastAccessTimes[url] = Date.now()
       Table[url] = resource
-      connManager.broadcast(MsgType.ResourceInfoSync, url)
-      runCheck()
+
+      // 本地资源需要广播给其他节点，告知他们可以在当前节点读取资源
+      if (resource.source === 'local') {
+        connManager.broadcast(MsgType.ResourceInfoSync, url)
+      }
+      runExpiresCheck()
+    },
+    delete(url: string) {
+      delete Table[url]
+      delete lastAccessTimes[url]
     },
     getAll() {
       return { ...Table }
@@ -149,6 +178,7 @@ function createResourceTable() {
 }
 
 const ResourceTable = createResourceTable()
+let serverDownloadBytes = 0
 
 export async function getResourceData(url: string, onResp: RespHandler) {
   if (ResourceTable.get(url)) {
@@ -156,22 +186,50 @@ export async function getResourceData(url: string, onResp: RespHandler) {
     return 
   }
 
-  ResourceTable.add(url, new Resource(url))
+  const res = new Resource(url, 'local')
+  const fetchPromise = fetchResOfServer(url)
+  res.setFetchPromise(fetchPromise)
+  ResourceTable.add(url, res)
   
-  const buffer = await fetchResOfServer(url)
-  ResourceTable.get(url).setData(buffer)
-  onResp({ done: true, value: buffer })
+  try {
+    const data = await fetchPromise
+    serverDownloadBytes += data.byteLength
+    onResp({ done: true, value: data })
+    if (!data) {
+      console.error('未读取到CDN资源数据')
+    }
+  } catch (e) {
+    ResourceTable.delete(url)
+    console.error(e)
+    throw e
+  }
+
 }
 
+/**
+ * 只读取本地资源数据，用于给远程p2p节点分享数据
+ * @param url 
+ * @param onResp 
+ */
 export function readLocalResource(url: string, onResp: RespHandler) {
-  if (!ResourceTable.get(url).readLocalData(onResp)) {
+  const res = ResourceTable.get(url)
+  if (!res) {
+    onResp({ done: true, value: null })
+    return
+  }
+  if (!res.readLocalData(onResp)) {
     onResp({ done: true, value: null })
   }
 }
 
+/**
+ * 添加一个远程节点资源
+ * @param url 
+ * @param remoteNode 可从此节点获取数据
+ */
 export function addRemoteResource(url: string, remoteNode) {
   if (!ResourceTable.get(url)) {
-    ResourceTable.add(url, new Resource(url))
+    ResourceTable.add(url, new Resource(url, 'remote'))
   }
 
   ResourceTable.get(url).addRemoteNode(remoteNode)
@@ -181,8 +239,6 @@ export function getAllResource(): string[] {
   return Object.keys(ResourceTable.getAll())
 }
 
-async function fetchResOfServer(url: string): Promise<ArrayBuffer> {
-  const res = await fetch(url, { cache: 'no-cache' })
-  if (res.ok) return res.arrayBuffer()
-  throw new Error(`url: ${url}, res: ${res.status}`)
+export function getServerDownloadBytes() {
+  return serverDownloadBytes
 }

@@ -1,4 +1,4 @@
-import { getAllResource, getResourceData } from "../../src/resource"
+import { getAllResource, getResourceData, getServerDownloadBytes } from "../../src/resource"
 import { connManager } from "../../src/connect/manager"
 import livePlayer from './live_players.js'
 
@@ -18,6 +18,7 @@ setInterval(() => {
 const resTable = document.getElementById('res-table')
 const p2pUpload = document.getElementById('p2p-upload-size')
 const p2pDownload = document.getElementById('p2p-download-size')
+const cdnDownload = document.getElementById('cdn-download-size')
 setInterval(() => {
   resTable.innerHTML = ''
   const items = getAllResource().map((url) => {
@@ -39,23 +40,23 @@ setInterval(() => {
   
   p2pUpload.textContent = String(Math.round(upload / 1024))
   p2pDownload.textContent = String(Math.round(download / 1024))
+  cdnDownload.textContent = String(Math.round(getServerDownloadBytes() / 1024))
 }, 1000)
 
 // -------------- player -------------------
 
 const videoElement = document.getElementById('video')
 const mediaSource = new window.MediaSource()
-const url = 'http://111.231.13.74/live/46936/index.m3u8'
+const url = 'http://111.231.13.74/live/8178490/index.m3u8'
 
 const p2pContext = {
   fetchAsBuffer(url: string) {
-    // console.log('------- fetchAsBuffer: ', url)
     getResourceData(url, ({ value, done }) => {
-      // console.log('------- fetchData: ', url, done)
       if (value) this._onResult(url, value)
     })
   }, 
   onPlaylistUpdate(flag, entry) {
+    getResourceData(entry.uri, () => {})
     // console.log('----- onPlaylistUpdate: ', flag, entry)
   }
 }
